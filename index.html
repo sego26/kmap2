@@ -222,6 +222,7 @@
   }
   .controls b{ color:var(--text); }
   #detailCard{
+    position:relative;
     margin-top:24px;
     padding:14px;
     background:var(--panel-2);
@@ -230,6 +231,20 @@
     display:none;
   }
   #detailCard.show{ display:block; }
+  #dClose{
+    position:absolute;
+    top:8px;
+    right:8px;
+    width:22px; height:22px;
+    background:transparent;
+    border:none;
+    color:var(--text-dim);
+    font-size:16px;
+    line-height:1;
+    cursor:pointer;
+    border-radius:4px;
+  }
+  #dClose:hover{ color:var(--text); background:rgba(255,255,255,0.06); }
   #detailCard .d-name{
     font-family:'Inter',sans-serif;
     font-weight:600;
@@ -389,6 +404,7 @@
         <b>Search</b> to locate a ruler
       </div>
       <div id="detailCard">
+        <button id="dClose" aria-label="Deselect">×</button>
         <div class="d-name" id="dName"></div>
         <div class="d-row"><span>Coordinates</span><span id="dCoord"></span></div>
         <div class="d-row"><span>Power</span><span id="dPower"></span></div>
@@ -660,7 +676,7 @@ window.addEventListener('mouseup', ()=>{
 
 document.getElementById('zoomIn').onclick = ()=>{ scale = Math.min(scale*1.3,12); applyTransform(); };
 document.getElementById('zoomOut').onclick = ()=>{ scale = Math.max(scale/1.3,0.6); applyTransform(); };
-document.getElementById('zoomReset').onclick = ()=>{ scale=1; tx=0; ty=0; applyTransform(); };
+document.getElementById('zoomReset').onclick = ()=>{ scale=1; tx=0; ty=0; applyTransform(); deselect(); };
 
 // node interactions
 viewport.addEventListener('mousemove', (e)=>{
@@ -716,16 +732,41 @@ function clearHighlight(){
   document.querySelectorAll('.node').forEach(n=>n.classList.remove('highlight','dimmed'));
 }
 
+function deselect(){
+  clearHighlight();
+  document.getElementById('detailCard').classList.remove('show');
+  searchInput.value = '';
+  dropdown.classList.remove('open');
+}
+document.getElementById('dClose').addEventListener('click', deselect);
+
+// clicking empty map space (not a node, and not a drag) deselects
+viewport.addEventListener('click', (e)=>{
+  if(dragged) return;
+  const g = e.target.closest('.node');
+  if(g) return; // handled by the node click listener above
+  deselect();
+});
+
+document.addEventListener('keydown', (e)=>{
+  if(e.key === 'Escape' && !dropdown.classList.contains('open')){
+    deselect();
+  }
+});
+
 // search
 const searchInput = document.getElementById('search');
 const dropdown = document.getElementById('dropdown');
 let activeIdx = -1;
 let currentMatches = [];
+function sortMatches(list){
+  return [...list].sort((a,b)=>b.power-a.power).slice(0,20);
+}
 
 searchInput.addEventListener('input', ()=>{
   const q = searchInput.value.trim().toLowerCase();
   if(!q){ dropdown.classList.remove('open'); clearHighlight(); return; }
-  currentMatches = DATA.filter(d=>d.name.toLowerCase().includes(q)).sort((a,b)=>b.power-a.power).slice(0,20);
+  currentMatches = sortMatches(DATA.filter(d=>d.name.toLowerCase().includes(q)));
   activeIdx = -1;
   renderDropdown();
 });
