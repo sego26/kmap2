@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow, noarchive">
+<title>Kingdom Map — Territory Overview</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0f1420;
+    --panel:#161d2b;
+    --panel-2:#1c2436;
+    --grid:#26314a;
+    --grid-major:#334165;
+    --text:#e9e4d3;
+    --text-dim:#8c93a8;
+    --gold:#c9a961;
+    --crimson:#b3432f;
+    --teal:#4a9d8f;
+    --steel:#5b7ba6;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{height:100%;}
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:'Inter', sans-serif;
+    overflow:hidden;
+  }
+  .app{
+    display:flex;
+    flex-direction:column;
+    height:100vh;
+  }
+  header{
+    display:flex;
+    align-items:center;
+    gap:20px;
+    padding:16px 24px;
+    background:linear-gradient(180deg, var(--panel-2), var(--panel));
+    border-bottom:1px solid var(--grid-major);
+    flex-wrap:wrap;
+    z-index:20;
+    position:relative;
+  }
+  .title-block{display:flex; align-items:baseline; gap:10px;}
+  h1{
+    font-family:'Cinzel', serif;
+    font-weight:700;
+    font-size:22px;
+    letter-spacing:0.5px;
+    color:var(--gold);
+    white-space:nowrap;
+  }
+  .subtitle{
+    font-family:'JetBrains Mono', monospace;
+    font-size:11px;
+    color:var(--text-dim);
+    letter-spacing:0.5px;
+  }
+  .search-wrap{
+    position:relative;
+    flex:1;
+    min-width:220px;
+    max-width:380px;
+  }
+  #search{
+    width:100%;
+    background:var(--bg);
+    border:1px solid var(--grid-major);
+    color:var(--text);
+    padding:10px 14px;
+    border-radius:6px;
+    font-family:'JetBrains Mono', monospace;
+    font-size:13px;
+    outline:none;
+    transition:border-color .15s;
+  }
+  #search:focus{ border-color:var(--gold); }
+  #search::placeholder{ color:var(--text-dim); }
+  .dropdown{
+    position:absolute;
+    top:calc(100% + 6px);
+    left:0;
+    right:0;
+    background:var(--panel-2);
+    border:1px solid var(--grid-major);
+    border-radius:6px;
+    max-height:260px;
+    overflow-y:auto;
+    display:none;
+    box-shadow:0 8px 24px rgba(0,0,0,.5);
+    z-index:30;
+  }
+  .dropdown.open{ display:block; }
+  .dd-item{
+    padding:9px 14px;
+    cursor:pointer;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    font-size:13px;
+    border-bottom:1px solid var(--grid);
+  }
+  .dd-item:last-child{ border-bottom:none; }
+  .dd-item:hover, .dd-item.active{ background:rgba(201,169,97,0.12); }
+  .dd-name{ color:var(--text); font-weight:500; }
+  .dd-power{ font-family:'JetBrains Mono', monospace; font-size:11px; color:var(--gold); }
+  .dd-coord{ font-family:'JetBrains Mono', monospace; font-size:10px; color:var(--text-dim); margin-left:8px;}
+  .stats{
+    display:flex;
+    gap:22px;
+    font-family:'JetBrains Mono', monospace;
+    font-size:11px;
+    color:var(--text-dim);
+    white-space:nowrap;
+  }
+  .stats b{ color:var(--gold); font-weight:600; }
+  .main{
+    flex:1;
+    display:flex;
+    position:relative;
+    overflow:hidden;
+  }
+  #mapWrap{
+    flex:1;
+    position:relative;
+    cursor:grab;
+    background:
+      radial-gradient(ellipse at 30% 20%, rgba(74,157,143,0.06), transparent 60%),
+      radial-gradient(ellipse at 70% 80%, rgba(179,67,47,0.06), transparent 60%),
+      var(--bg);
+  }
+  #mapWrap.dragging{ cursor:grabbing; }
+  svg{ width:100%; height:100%; display:block; }
+  .grid-line{ stroke:var(--grid); stroke-width:1; }
+  .grid-line.major{ stroke:var(--grid-major); }
+  .axis-label{
+    fill:var(--text-dim);
+    font-family:'JetBrains Mono', monospace;
+    font-size:9px;
+  }
+  .node{ cursor:pointer; transition:opacity .2s; }
+  .node circle.halo{ opacity:0; transition:opacity .2s; }
+  .node:hover circle.halo, .node.highlight circle.halo{ opacity:0.35; }
+  .node.dimmed{ opacity:0.18; }
+  .node.highlight circle.core{ stroke:var(--gold); stroke-width:2; }
+  .node-label{
+    fill:var(--text);
+    font-family:'Inter', sans-serif;
+    font-size:9px;
+    font-weight:500;
+    pointer-events:none;
+    opacity:0;
+    transition:opacity .15s;
+  }
+  .node:hover .node-label, .node.highlight .node-label{ opacity:1; }
+  .sweep{
+    transform-origin:center;
+    animation:sweep 2.2s ease-out 1;
+  }
+  @keyframes sweep{
+    from{ stroke-dashoffset:0; opacity:1;}
+    to{ stroke-dashoffset:0; opacity:0;}
+  }
+  #tooltip{
+    position:fixed;
+    pointer-events:none;
+    background:var(--panel-2);
+    border:1px solid var(--gold);
+    border-radius:6px;
+    padding:10px 14px;
+    font-family:'JetBrains Mono', monospace;
+    font-size:12px;
+    color:var(--text);
+    z-index:100;
+    display:none;
+    box-shadow:0 8px 20px rgba(0,0,0,.5);
+    min-width:150px;
+  }
+  #tooltip .t-name{ font-family:'Inter',sans-serif; font-weight:600; font-size:13px; color:var(--gold); margin-bottom:4px; }
+  #tooltip .t-row{ display:flex; justify-content:space-between; gap:16px; color:var(--text-dim); }
+  #tooltip .t-row span:last-child{ color:var(--text); }
+
+  aside{
+    width:230px;
+    background:var(--panel);
+    border-left:1px solid var(--grid-major);
+    padding:20px 18px;
+    overflow-y:auto;
+    flex-shrink:0;
+  }
+  aside h2{
+    font-family:'Cinzel', serif;
+    font-size:13px;
+    color:var(--gold);
+    letter-spacing:0.5px;
+    margin-bottom:14px;
+    text-transform:uppercase;
+  }
+  .legend-row{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    margin-bottom:10px;
+    font-size:12px;
+    color:var(--text-dim);
+  }
+  .swatch{
+    width:12px; height:12px;
+    border-radius:50%;
+    flex-shrink:0;
+  }
+  .controls{
+    margin-top:24px;
+    font-size:11px;
+    color:var(--text-dim);
+    line-height:1.8;
+    font-family:'JetBrains Mono', monospace;
+  }
+  .controls b{ color:var(--text); }
+  #detailCard{
+    margin-top:24px;
+    padding:14px;
+    background:var(--panel-2);
+    border:1px solid var(--grid-major);
+    border-radius:8px;
+    display:none;
+  }
+  #detailCard.show{ display:block; }
+  #detailCard .d-name{
+    font-family:'Inter',sans-serif;
+    font-weight:600;
+    font-size:14px;
+    color:var(--gold);
+    margin-bottom:8px;
+  }
+  #detailCard .d-row{
+    display:flex;
+    justify-content:space-between;
+    font-size:12px;
+    font-family:'JetBrains Mono', monospace;
+    color:var(--text-dim);
+    margin-bottom:4px;
+  }
+  #detailCard .d-row span:last-child{ color:var(--text); }
+  #zoomCtl{
+    position:absolute;
+    bottom:20px;
+    right:20px;
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+    z-index:15;
+  }
+  #zoomCtl button{
+    width:32px; height:32px;
+    background:var(--panel-2);
+    border:1px solid var(--grid-major);
+    color:var(--text);
+    font-size:16px;
+    border-radius:6px;
+    cursor:pointer;
+  }
+  #zoomCtl button:hover{ border-color:var(--gold); color:var(--gold); }
+
+  #lockScreen{
+    position:fixed;
+    inset:0;
+    background:var(--bg);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    z-index:1000;
+  }
+  #lockScreen.hidden{ display:none; }
+  .lock-card{
+    background:var(--panel-2);
+    border:1px solid var(--grid-major);
+    border-radius:10px;
+    padding:36px 34px;
+    width:300px;
+    text-align:center;
+    box-shadow:0 20px 60px rgba(0,0,0,.6);
+  }
+  .lock-card h1{
+    font-family:'Cinzel', serif;
+    color:var(--gold);
+    font-size:19px;
+    margin-bottom:6px;
+  }
+  .lock-card p{
+    font-family:'JetBrains Mono', monospace;
+    font-size:11px;
+    color:var(--text-dim);
+    margin-bottom:20px;
+  }
+  #lockInput{
+    width:100%;
+    background:var(--bg);
+    border:1px solid var(--grid-major);
+    color:var(--text);
+    padding:11px 14px;
+    border-radius:6px;
+    font-family:'JetBrains Mono', monospace;
+    font-size:14px;
+    outline:none;
+    text-align:center;
+    letter-spacing:2px;
+    margin-bottom:12px;
+  }
+  #lockInput:focus{ border-color:var(--gold); }
+  #lockBtn{
+    width:100%;
+    background:var(--gold);
+    border:none;
+    color:var(--bg);
+    padding:11px 14px;
+    border-radius:6px;
+    font-family:'Inter', sans-serif;
+    font-weight:600;
+    font-size:13px;
+    cursor:pointer;
+    letter-spacing:0.3px;
+  }
+  #lockBtn:hover{ opacity:0.9; }
+  #lockError{
+    color:var(--crimson);
+    font-family:'JetBrains Mono', monospace;
+    font-size:11px;
+    margin-top:10px;
+    height:14px;
+  }
+
+  @media (max-width: 720px){
+    aside{ display:none; }
+    header{ padding:12px 14px; gap:10px; }
+    h1{ font-size:17px; }
+    .subtitle{ display:none; }
+    .stats{ display:none; }
+  }
+</style>
+</head>
+<body>
+<div id="lockScreen">
+  <div class="lock-card">
+    <h1>Kingdom Map</h1>
+    <p>ENTER PASSCODE TO VIEW</p>
+    <input id="lockInput" type="password" placeholder="••••••••" autocomplete="off">
+    <button id="lockBtn">Enter</button>
+    <div id="lockError"></div>
+  </div>
+</div>
+<div class="app">
+  <header>
+    <div class="title-block">
+      <h1>Kingdom Map</h1>
+      <span class="subtitle">TERRITORY OVERVIEW</span>
+    </div>
+    <div class="search-wrap">
+      <input id="search" type="text" placeholder="Search by ruler or city name…" autocomplete="off">
+      <div class="dropdown" id="dropdown"></div>
+    </div>
+    <div class="stats" id="stats"></div>
+  </header>
+  <div class="main">
+    <div id="mapWrap">
+      <svg id="svg" viewBox="0 0 1000 700" preserveAspectRatio="xMidYMid meet">
+        <g id="viewport"></g>
+      </svg>
+      <div id="zoomCtl">
+        <button id="zoomIn">+</button>
+        <button id="zoomOut">–</button>
+        <button id="zoomReset">⟲</button>
+      </div>
+    </div>
+    <aside>
+      <h2>Power Tier</h2>
+      <div class="legend-row"><div class="swatch" style="background:#4a9d8f"></div> Under 40M</div>
+      <div class="legend-row"><div class="swatch" style="background:#5b7ba6"></div> 40M – 70M</div>
+      <div class="legend-row"><div class="swatch" style="background:#c9a961"></div> 70M – 110M</div>
+      <div class="legend-row"><div class="swatch" style="background:#b3432f"></div> 110M+</div>
+      <div class="controls">
+        <b>Scroll</b> to zoom<br>
+        <b>Drag</b> to pan<br>
+        <b>Click</b> a marker for detail<br>
+        <b>Search</b> to locate a ruler
+      </div>
+      <div id="detailCard">
+        <div class="d-name" id="dName"></div>
+        <div class="d-row"><span>Coordinates</span><span id="dCoord"></span></div>
+        <div class="d-row"><span>Power</span><span id="dPower"></span></div>
+        <div class="d-row"><span>Rank</span><span id="dRank"></span></div>
+      </div>
+    </aside>
+  </div>
+</div>
+<div id="tooltip"></div>
+
+<script>
+// ---- Passcode gate ----
+// Change PASSCODE below to whatever you want the shared password to be.
+// Note: this is a simple front-end lock (deters casual visitors / link-guessers),
+// not real security — anyone who views the page source can find the passcode.
+const PASSCODE = "k1716";
+
+const lockScreen = document.getElementById('lockScreen');
+const lockInput = document.getElementById('lockInput');
+const lockBtn = document.getElementById('lockBtn');
+const lockError = document.getElementById('lockError');
+
+function tryUnlock(){
+  if(lockInput.value === PASSCODE){
+    lockScreen.classList.add('hidden');
+  } else {
+    lockError.textContent = 'Incorrect passcode';
+    lockInput.value = '';
+    lockInput.focus();
+  }
+}
+lockBtn.addEventListener('click', tryUnlock);
+lockInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter') tryUnlock(); });
+lockInput.focus();
+
+const DATA = [{"name": "RamKing II", "x": 437, "y": 580, "power": 79249147}, {"name": "Paquetop", "x": 450, "y": 578, "power": 69300507}, {"name": "Simon the Great", "x": 733, "y": 592, "power": 100624127}, {"name": "Reaper", "x": 733, "y": 580, "power": 67015440}, {"name": "AnimeYa", "x": 733, "y": 582, "power": 60002845}, {"name": "KeevyJohnson", "x": 734, "y": 576, "power": 73561753}, {"name": "Sunshine", "x": 735, "y": 582, "power": 66238730}, {"name": "JordonJ", "x": 735, "y": 580, "power": 51083632}, {"name": "Templário33", "x": 736, "y": 576, "power": 79174762}, {"name": "Theodore", "x": 736, "y": 578, "power": 78583987}, {"name": "sokran", "x": 736, "y": 585, "power": 69691420}, {"name": "hello", "x": 737, "y": 582, "power": 99624180}, {"name": "MinionTM2", "x": 737, "y": 587, "power": 83548382}, {"name": "weddyshot", "x": 737, "y": 574, "power": 75588135}, {"name": "Stella", "x": 738, "y": 578, "power": 69607939}, {"name": "AK ILL", "x": 738, "y": 584, "power": 65486912}, {"name": "BrayanJ", "x": 738, "y": 576, "power": 57725879}, {"name": "GUARDIAN", "x": 739, "y": 580, "power": 145092165}, {"name": "hannibal", "x": 739, "y": 582, "power": 97508038}, {"name": "Vsidyeod", "x": 739, "y": 574, "power": 81005736}, {"name": "Lari", "x": 739, "y": 586, "power": 49891271}, {"name": "AnYuJin", "x": 740, "y": 578, "power": 124045098}, {"name": "zahbela", "x": 741, "y": 584, "power": 99210457}, {"name": "flushy", "x": 741, "y": 588, "power": 87540271}, {"name": "Boğazınyargıcı", "x": 741, "y": 586, "power": 74102416}, {"name": "Liska", "x": 741, "y": 573, "power": 69768911}, {"name": "ilivator", "x": 742, "y": 579, "power": 101500212}, {"name": "M3N", "x": 743, "y": 584, "power": 110998338}, {"name": "Rhazzor", "x": 743, "y": 588, "power": 94413215}, {"name": "wuslat_61", "x": 743, "y": 576, "power": 76326094}, {"name": "Chels12345", "x": 743, "y": 574, "power": 53566465}, {"name": "LAROCOMS", "x": 743, "y": 586, "power": 45622399}, {"name": "Jon snow", "x": 744, "y": 580, "power": 112691831}, {"name": "ThanatosEnds", "x": 744, "y": 578, "power": 96061134}, {"name": "KAI", "x": 744, "y": 582, "power": 94344463}, {"name": "Shadow King", "x": 745, "y": 584, "power": 94685873}, {"name": "King Ragnar", "x": 745, "y": 588, "power": 88551107}, {"name": "crys", "x": 745, "y": 576, "power": 73154734}, {"name": "Lord Gonzo 1", "x": 745, "y": 586, "power": 55897017}, {"name": "Alexander Larry", "x": 746, "y": 582, "power": 73258590}, {"name": "K9N6", "x": 746, "y": 580, "power": 59495501}, {"name": "Lord Aqsa", "x": 746, "y": 574, "power": 58809298}, {"name": "lord256439434", "x": 746, "y": 578, "power": 51633041}, {"name": "TioXing", "x": 756, "y": 576, "power": 81514981}, {"name": "King Eddard", "x": 748, "y": 578, "power": 85875913}, {"name": "LordyLordLord", "x": 748, "y": 582, "power": 82122396}, {"name": "gremmy1", "x": 748, "y": 580, "power": 80262306}, {"name": "Eseil", "x": 748, "y": 576, "power": 78499841}, {"name": "Dg Moraes IATF", "x": 749, "y": 585, "power": 60221639}, {"name": "Bas", "x": 751, "y": 585, "power": 76303514}, {"name": "Manas Kingdom", "x": 753, "y": 579, "power": 68838832}, {"name": "Muriel2026", "x": 755, "y": 587, "power": 68904973}, {"name": "Omer", "x": 756, "y": 582, "power": 75061903}, {"name": "LadyEstrada", "x": 756, "y": 572, "power": 61212836}, {"name": "LL99", "x": 756, "y": 580, "power": 60730744}, {"name": "El Rey Jorge", "x": 756, "y": 578, "power": 57807891}, {"name": "REI_RAVI", "x": 756, "y": 574, "power": 54897780}, {"name": "Bernard", "x": 758, "y": 581, "power": 86299652}, {"name": "Özgür21", "x": 758, "y": 574, "power": 77424216}, {"name": "Lydia", "x": 758, "y": 570, "power": 72329090}, {"name": "Lord Ironstrong", "x": 758, "y": 583, "power": 69760557}, {"name": "Farma", "x": 758, "y": 577, "power": 67716726}, {"name": "lady26", "x": 760, "y": 578, "power": 108885742}, {"name": "Sandro", "x": 760, "y": 580, "power": 96251072}, {"name": "SwankyTinker", "x": 760, "y": 576, "power": 92359886}, {"name": "MAZE", "x": 760, "y": 572, "power": 79334614}, {"name": "King Bigdog", "x": 760, "y": 582, "power": 79106076}, {"name": "Pitu", "x": 760, "y": 574, "power": 69465326}, {"name": "faker", "x": 760, "y": 584, "power": 66625160}, {"name": "DanteVP", "x": 762, "y": 577, "power": 114991802}, {"name": "BLOODKING", "x": 762, "y": 582, "power": 105705843}, {"name": "ladyYami", "x": 762, "y": 575, "power": 92399153}, {"name": "Dr houss", "x": 762, "y": 584, "power": 79226732}, {"name": "TinyCeku", "x": 763, "y": 586, "power": 70162838}, {"name": "Blood Farm", "x": 763, "y": 571, "power": 48537571}, {"name": "Máximus Décimus", "x": 764, "y": 577, "power": 104372395}, {"name": "Buffy", "x": 764, "y": 582, "power": 90860103}, {"name": "Navenka", "x": 764, "y": 575, "power": 77254808}, {"name": "Roger de Flor", "x": 764, "y": 573, "power": 70517023}, {"name": "gkgecimli", "x": 764, "y": 584, "power": 63137152}, {"name": "Eiei", "x": 765, "y": 570, "power": 84741135}, {"name": "KHALID", "x": 766, "y": 582, "power": 144595756}, {"name": "Athos", "x": 766, "y": 578, "power": 96463273}, {"name": "Chagalicho", "x": 766, "y": 580, "power": 94846567}, {"name": "Bubbles", "x": 766, "y": 576, "power": 84909315}, {"name": "luigi35", "x": 766, "y": 572, "power": 69506364}, {"name": "LordHala", "x": 766, "y": 574, "power": 65480020}, {"name": "Firefox QC", "x": 766, "y": 586, "power": 63925687}, {"name": "Sr Uchiha", "x": 766, "y": 584, "power": 53387982}, {"name": "LordEstrada", "x": 768, "y": 583, "power": 95926625}, {"name": "Aegon", "x": 768, "y": 578, "power": 85278781}, {"name": "YuriBR", "x": 768, "y": 585, "power": 76867864}, {"name": "sil", "x": 768, "y": 581, "power": 75110053}, {"name": "UTIJ", "x": 768, "y": 576, "power": 63046642}, {"name": "ElohimCross", "x": 768, "y": 574, "power": 61993974}, {"name": "Bretagne", "x": 770, "y": 583, "power": 74052851}, {"name": "~ TRAVELER ~", "x": 770, "y": 578, "power": 74004852}, {"name": "Zahbony", "x": 770, "y": 598, "power": 71731023}, {"name": "JCC", "x": 770, "y": 574, "power": 65661195}, {"name": "Jen123", "x": 772, "y": 578, "power": 49048229}];
+
+// sort for ranking
+const ranked = [...DATA].sort((a,b)=>b.power-a.power);
+ranked.forEach((d,i)=>{ d.rank = i+1; });
+const rankMap = new Map(DATA.map(d=>[d.name+d.x+d.y, ranked.find(r=>r.name===d.name && r.x===d.x && r.y===d.y).rank]));
+
+const svg = document.getElementById('svg');
+const viewport = document.getElementById('viewport');
+const mapWrap = document.getElementById('mapWrap');
+const tooltip = document.getElementById('tooltip');
+
+const xs = DATA.map(d=>d.x), ys = DATA.map(d=>d.y);
+const minX = Math.min(...xs), maxX = Math.max(...xs);
+const minY = Math.min(...ys), maxY = Math.max(...ys);
+const padX = (maxX-minX)*0.18 || 2;
+const padY = (maxY-minY)*0.18 || 2;
+const worldX0 = minX-padX, worldX1 = maxX+padX;
+const worldY0 = minY-padY, worldY1 = maxY+padY;
+
+const VB_W = 1000, VB_H = 700;
+function worldToScreen(x,y){
+  const sx = (x-worldX0)/(worldX1-worldX0)*VB_W;
+  const sy = VB_H - (y-worldY0)/(worldY1-worldY0)*VB_H; // invert y so higher Y draws near "top"
+  return [sx,sy];
+}
+
+function powerColor(p){
+  if(p < 40000000) return '#4a9d8f';
+  if(p < 70000000) return '#5b7ba6';
+  if(p < 110000000) return '#c9a961';
+  return '#b3432f';
+}
+function powerRadius(p){
+  const r = 4 + Math.sqrt(p)/1400;
+  return Math.min(Math.max(r,4), 16);
+}
+function fmt(n){ return n.toLocaleString('en-US'); }
+
+// build grid
+const gridSpacing = 2; // world units
+function buildGrid(){
+  let out = '';
+  for(let gx = Math.ceil(worldX0/gridSpacing)*gridSpacing; gx<=worldX1; gx+=gridSpacing){
+    const [sx1,sy1] = worldToScreen(gx, worldY0);
+    const [sx2,sy2] = worldToScreen(gx, worldY1);
+    const major = gx % (gridSpacing*5) === 0;
+    out += `<line class="grid-line${major?' major':''}" x1="${sx1}" y1="${sy1}" x2="${sx2}" y2="${sy2}"></line>`;
+    if(major){
+      out += `<text class="axis-label" x="${sx1+3}" y="${VB_H-6}">${gx}</text>`;
+    }
+  }
+  for(let gy = Math.ceil(worldY0/gridSpacing)*gridSpacing; gy<=worldY1; gy+=gridSpacing){
+    const [sx1,sy1] = worldToScreen(worldX0, gy);
+    const [sx2,sy2] = worldToScreen(worldX1, gy);
+    const major = gy % (gridSpacing*5) === 0;
+    out += `<line class="grid-line${major?' major':''}" x1="${sx1}" y1="${sy1}" x2="${sx2}" y2="${sy2}"></line>`;
+    if(major){
+      out += `<text class="axis-label" x="4" y="${sy1-3}">${gy}</text>`;
+    }
+  }
+  return out;
+}
+
+function buildNodes(){
+  let out = '';
+  DATA.forEach((d,i)=>{
+    const [sx,sy] = worldToScreen(d.x,d.y);
+    const r = powerRadius(d.power);
+    const c = powerColor(d.power);
+    out += `<g class="node" data-idx="${i}" transform="translate(${sx},${sy})">
+      <circle class="halo" r="${r+9}" fill="${c}"></circle>
+      <circle class="core" r="${r}" fill="${c}" fill-opacity="0.85" stroke="rgba(0,0,0,0.4)" stroke-width="1"></circle>
+      <text class="node-label" x="${r+5}" y="4">${escapeHtml(d.name)}</text>
+    </g>`;
+  });
+  return out;
+}
+
+function escapeHtml(s){
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+viewport.innerHTML = buildGrid() + buildNodes();
+
+// stats
+document.getElementById('stats').innerHTML = `
+  <span><b>${DATA.length}</b> kingdoms</span>
+  <span>avg <b>${fmt(Math.round(DATA.reduce((s,d)=>s+d.power,0)/DATA.length))}</b></span>
+  <span>top <b>${fmt(ranked[0].power)}</b> (${escapeHtml(ranked[0].name)})</span>
+`;
+
+// pan / zoom state
+let scale = 1, tx = 0, ty = 0;
+let isDragging = false, lastX=0, lastY=0, dragged=false;
+
+function applyTransform(){
+  viewport.setAttribute('transform', `translate(${tx},${ty}) scale(${scale})`);
+}
+
+mapWrap.addEventListener('wheel', (e)=>{
+  e.preventDefault();
+  const rect = mapWrap.getBoundingClientRect();
+  const mx = (e.clientX-rect.left)/rect.width*VB_W;
+  const my = (e.clientY-rect.top)/rect.height*VB_H;
+  const delta = e.deltaY < 0 ? 1.15 : 1/1.15;
+  const newScale = Math.min(Math.max(scale*delta, 0.6), 12);
+  // keep cursor position fixed
+  tx = mx - (mx-tx)*(newScale/scale);
+  ty = my - (my-ty)*(newScale/scale);
+  scale = newScale;
+  applyTransform();
+}, {passive:false});
+
+mapWrap.addEventListener('mousedown', (e)=>{
+  isDragging = true; dragged = false;
+  lastX = e.clientX; lastY = e.clientY;
+  mapWrap.classList.add('dragging');
+});
+window.addEventListener('mousemove', (e)=>{
+  if(!isDragging) return;
+  const dx = e.clientX-lastX, dy = e.clientY-lastY;
+  if(Math.abs(dx)>2||Math.abs(dy)>2) dragged = true;
+  const rect = mapWrap.getBoundingClientRect();
+  tx += dx/rect.width*VB_W;
+  ty += dy/rect.height*VB_H;
+  lastX = e.clientX; lastY = e.clientY;
+  applyTransform();
+});
+window.addEventListener('mouseup', ()=>{
+  isDragging = false;
+  mapWrap.classList.remove('dragging');
+});
+
+document.getElementById('zoomIn').onclick = ()=>{ scale = Math.min(scale*1.3,12); applyTransform(); };
+document.getElementById('zoomOut').onclick = ()=>{ scale = Math.max(scale/1.3,0.6); applyTransform(); };
+document.getElementById('zoomReset').onclick = ()=>{ scale=1; tx=0; ty=0; applyTransform(); };
+
+// node interactions
+viewport.addEventListener('mousemove', (e)=>{
+  const g = e.target.closest('.node');
+  if(!g){ tooltip.style.display='none'; return; }
+  const d = DATA[g.dataset.idx];
+  tooltip.innerHTML = `<div class="t-name">${escapeHtml(d.name)}</div>
+    <div class="t-row"><span>X,Y</span><span>${d.x}, ${d.y}</span></div>
+    <div class="t-row"><span>Power</span><span>${fmt(d.power)}</span></div>
+    <div class="t-row"><span>Rank</span><span>#${rankOf(d)}</span></div>`;
+  tooltip.style.left = (e.clientX+16)+'px';
+  tooltip.style.top = (e.clientY+16)+'px';
+  tooltip.style.display = 'block';
+});
+viewport.addEventListener('mouseleave', ()=>{ tooltip.style.display='none'; });
+
+function rankOf(d){
+  return ranked.findIndex(r=>r===d || (r.name===d.name && r.x===d.x && r.y===d.y)) + 1;
+}
+
+viewport.addEventListener('click', (e)=>{
+  if(dragged) return;
+  const g = e.target.closest('.node');
+  if(!g) return;
+  const d = DATA[g.dataset.idx];
+  showDetail(d);
+  focusNode(d);
+});
+
+function showDetail(d){
+  document.getElementById('detailCard').classList.add('show');
+  document.getElementById('dName').textContent = d.name;
+  document.getElementById('dCoord').textContent = `X:${d.x}  Y:${d.y}`;
+  document.getElementById('dPower').textContent = fmt(d.power);
+  document.getElementById('dRank').textContent = `#${rankOf(d)} of ${DATA.length}`;
+}
+
+function focusNode(d){
+  const [sx,sy] = worldToScreen(d.x,d.y);
+  scale = 4;
+  tx = VB_W/2 - sx*scale;
+  ty = VB_H/2 - sy*scale;
+  applyTransform();
+  document.querySelectorAll('.node').forEach(n=>n.classList.remove('highlight','dimmed'));
+  const idx = DATA.indexOf(d);
+  document.querySelectorAll('.node').forEach(n=>{
+    if(parseInt(n.dataset.idx)===idx) n.classList.add('highlight');
+    else n.classList.add('dimmed');
+  });
+}
+
+function clearHighlight(){
+  document.querySelectorAll('.node').forEach(n=>n.classList.remove('highlight','dimmed'));
+}
+
+// search
+const searchInput = document.getElementById('search');
+const dropdown = document.getElementById('dropdown');
+let activeIdx = -1;
+let currentMatches = [];
+
+searchInput.addEventListener('input', ()=>{
+  const q = searchInput.value.trim().toLowerCase();
+  if(!q){ dropdown.classList.remove('open'); clearHighlight(); return; }
+  currentMatches = DATA.filter(d=>d.name.toLowerCase().includes(q)).sort((a,b)=>b.power-a.power).slice(0,20);
+  activeIdx = -1;
+  renderDropdown();
+});
+
+function renderDropdown(){
+  if(currentMatches.length===0){
+    dropdown.innerHTML = `<div class="dd-item" style="color:var(--text-dim);cursor:default;">No matches</div>`;
+    dropdown.classList.add('open');
+    return;
+  }
+  dropdown.innerHTML = currentMatches.map((d,i)=>`
+    <div class="dd-item${i===activeIdx?' active':''}" data-i="${i}">
+      <span class="dd-name">${escapeHtml(d.name)}<span class="dd-coord">X:${d.x} Y:${d.y}</span></span>
+      <span class="dd-power">${fmt(d.power)}</span>
+    </div>`).join('');
+  dropdown.classList.add('open');
+  dropdown.querySelectorAll('.dd-item').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const d = currentMatches[parseInt(el.dataset.i)];
+      selectResult(d);
+    });
+  });
+}
+
+function selectResult(d){
+  searchInput.value = d.name;
+  dropdown.classList.remove('open');
+  showDetail(d);
+  focusNode(d);
+}
+
+searchInput.addEventListener('keydown', (e)=>{
+  if(!dropdown.classList.contains('open')) return;
+  if(e.key==='ArrowDown'){ e.preventDefault(); activeIdx = Math.min(activeIdx+1, currentMatches.length-1); renderDropdown(); }
+  else if(e.key==='ArrowUp'){ e.preventDefault(); activeIdx = Math.max(activeIdx-1, 0); renderDropdown(); }
+  else if(e.key==='Enter'){ e.preventDefault(); if(currentMatches[activeIdx]) selectResult(currentMatches[activeIdx]); else if(currentMatches[0]) selectResult(currentMatches[0]); }
+  else if(e.key==='Escape'){ dropdown.classList.remove('open'); }
+});
+
+document.addEventListener('click', (e)=>{
+  if(!e.target.closest('.search-wrap')) dropdown.classList.remove('open');
+});
+
+applyTransform();
+</script>
+</body>
+</html>
